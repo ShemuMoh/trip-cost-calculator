@@ -9,6 +9,8 @@ Enter:
 
 and it shows the estimated trip cost, fuel used, and cost per mile — updated live as you type.
 
+A news-style banner shows today's average petrol (E10) and diesel (B7) prices across London, averaged from the [UK government fuel price open data feeds](https://www.gov.uk/guidance/access-fuel-price-data) (Asda, Morrisons, Esso, Motor Fuel Group, Rontec) by a Vercel serverless function (`api/prices.js`, cached for 3 hours). Tap a price to use it in the calculator.
+
 ## How it works
 
 ```

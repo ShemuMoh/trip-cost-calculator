@@ -40,6 +40,86 @@
     justify-content: center;
     padding: 1.5rem;
   }
+  .wrap {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+  .ticker {
+    display: none;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid #dc2626;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+  }
+  .ticker.show { display: block; }
+  .ticker-head {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #dc2626;
+    margin-bottom: 0.55rem;
+  }
+  .ticker-head .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #dc2626;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+  .ticker-prices {
+    display: flex;
+    gap: 0.6rem;
+  }
+  .fuel-chip {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    border-radius: 10px;
+    padding: 0.5rem 0.75rem;
+    font-family: inherit;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .fuel-chip:hover { border-color: var(--accent); }
+  .fuel-chip.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .fuel-chip .fuel-name {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .fuel-chip .fuel-price {
+    font-size: 1.15rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .ticker-note {
+    margin-top: 0.5rem;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
   .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -137,6 +217,23 @@
 </style>
 </head>
 <body>
+  <div class="wrap">
+
+  <aside class="ticker" id="ticker" aria-live="polite">
+    <div class="ticker-head"><span class="dot"></span>London Fuel Prices — Today's Average</div>
+    <div class="ticker-prices">
+      <button class="fuel-chip" id="chipPetrol" type="button">
+        <span class="fuel-name">⛽ Petrol (E10)</span>
+        <span class="fuel-price" id="petrolPrice">—</span>
+      </button>
+      <button class="fuel-chip" id="chipDiesel" type="button">
+        <span class="fuel-name">🛢 Diesel (B7)</span>
+        <span class="fuel-price" id="dieselPrice">—</span>
+      </button>
+    </div>
+    <div class="ticker-note" id="tickerNote">Tap a price to use it in the calculator.</div>
+  </aside>
+
   <main class="card">
     <h1>⛽ Trip Cost Calculator</h1>
     <p class="subtitle">Work out how much your journey will cost in fuel.</p>
@@ -180,6 +277,8 @@
     <footer>Uses UK gallons (1 gal = 4.546 litres)</footer>
   </main>
 
+  </div>
+
 <script>
   const LITRES_PER_UK_GALLON = 4.54609;
   const inputs = ['price', 'mpg', 'miles'].map(id => document.getElementById(id));
@@ -208,6 +307,45 @@
 
   inputs.forEach(el => el.addEventListener('input', calculate));
   calculate();
+
+  // --- London fuel price banner ---
+  const priceInput = document.getElementById('price');
+  const chips = { petrol: document.getElementById('chipPetrol'), diesel: document.getElementById('chipDiesel') };
+
+  function usePrice(pence, chip) {
+    priceInput.value = (pence / 100).toFixed(2);
+    Object.values(chips).forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    calculate();
+  }
+
+  fetch('/api/prices')
+    .then(res => res.ok ? res.json() : Promise.reject())
+    .then(data => {
+      if (!data.petrolPence && !data.dieselPence) return;
+
+      if (data.petrolPence) {
+        document.getElementById('petrolPrice').textContent = data.petrolPence.toFixed(1) + 'p/L';
+        chips.petrol.addEventListener('click', () => usePrice(data.petrolPence, chips.petrol));
+      } else {
+        chips.petrol.disabled = true;
+      }
+
+      if (data.dieselPence) {
+        document.getElementById('dieselPrice').textContent = data.dieselPence.toFixed(1) + 'p/L';
+        chips.diesel.addEventListener('click', () => usePrice(data.dieselPence, chips.diesel));
+      } else {
+        chips.diesel.disabled = true;
+      }
+
+      if (data.stationCount) {
+        document.getElementById('tickerNote').textContent =
+          'Average of ' + data.stationCount + ' London stations. Tap a price to use it in the calculator.';
+      }
+
+      document.getElementById('ticker').classList.add('show');
+    })
+    .catch(() => { /* no banner if prices are unavailable (e.g. offline or local file) */ });
 </script>
 </body>
 </html>
