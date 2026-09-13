@@ -82,9 +82,20 @@
   .ticker-prices {
     display: flex;
     gap: 0.6rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* fade hint that there's more to scroll */
+    mask-image: linear-gradient(to right, black 92%, transparent);
+    -webkit-mask-image: linear-gradient(to right, black 92%, transparent);
+    padding-right: 1rem;
   }
+  .ticker-prices::-webkit-scrollbar { display: none; }
   .fuel-chip {
-    flex: 1;
+    flex: 0 0 auto;
+    min-width: 138px;
+    scroll-snap-align: start;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -221,16 +232,7 @@
 
   <aside class="ticker" id="ticker" aria-live="polite">
     <div class="ticker-head"><span class="dot"></span>London Fuel Prices — Today's Average</div>
-    <div class="ticker-prices">
-      <button class="fuel-chip" id="chipPetrol" type="button">
-        <span class="fuel-name">⛽ Petrol (E10)</span>
-        <span class="fuel-price" id="petrolPrice">—</span>
-      </button>
-      <button class="fuel-chip" id="chipDiesel" type="button">
-        <span class="fuel-name">🛢 Diesel (B7)</span>
-        <span class="fuel-price" id="dieselPrice">—</span>
-      </button>
-    </div>
+    <div class="ticker-prices" id="tickerPrices"></div>
     <div class="ticker-note" id="tickerNote">Tap a price to use it in the calculator.</div>
   </aside>
 
@@ -310,11 +312,18 @@
 
   // --- London fuel price banner ---
   const priceInput = document.getElementById('price');
-  const chips = { petrol: document.getElementById('chipPetrol'), diesel: document.getElementById('chipDiesel') };
+
+  const FUEL_LABELS = [
+    ['E10', '⛽ Petrol (E10)'],
+    ['E5',  '⛽ Super Unleaded (E5)'],
+    ['B7',  '🛢 Diesel (B7)'],
+    ['B10', '🛢 Diesel (B10)'],
+    ['SDV', '🛢 Super Diesel'],
+  ];
 
   function usePrice(pence, chip) {
     priceInput.value = (pence / 100).toFixed(2);
-    Object.values(chips).forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.fuel-chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
     calculate();
   }
@@ -322,25 +331,31 @@
   fetch('/api/prices')
     .then(res => res.ok ? res.json() : Promise.reject())
     .then(data => {
-      if (!data.petrolPence && !data.dieselPence) return;
+      const fuels = data.fuels || { E10: data.petrolPence, B7: data.dieselPence };
+      const row = document.getElementById('tickerPrices');
+      let shown = 0;
 
-      if (data.petrolPence) {
-        document.getElementById('petrolPrice').textContent = data.petrolPence.toFixed(1) + 'p/L';
-        chips.petrol.addEventListener('click', () => usePrice(data.petrolPence, chips.petrol));
-      } else {
-        chips.petrol.disabled = true;
+      for (const [key, label] of FUEL_LABELS) {
+        const pence = fuels[key];
+        if (!pence) continue;
+
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'fuel-chip';
+        chip.innerHTML =
+          '<span class="fuel-name"></span><span class="fuel-price"></span>';
+        chip.querySelector('.fuel-name').textContent = label;
+        chip.querySelector('.fuel-price').textContent = pence.toFixed(1) + 'p/L';
+        chip.addEventListener('click', () => usePrice(pence, chip));
+        row.appendChild(chip);
+        shown++;
       }
 
-      if (data.dieselPence) {
-        document.getElementById('dieselPrice').textContent = data.dieselPence.toFixed(1) + 'p/L';
-        chips.diesel.addEventListener('click', () => usePrice(data.dieselPence, chips.diesel));
-      } else {
-        chips.diesel.disabled = true;
-      }
+      if (!shown) return;
 
       if (data.stationCount) {
         document.getElementById('tickerNote').textContent =
-          'Average of ' + data.stationCount + ' London stations. Tap a price to use it in the calculator.';
+          'Average of ' + data.stationCount + ' London stations. Swipe for more, tap a price to use it.';
       }
 
       document.getElementById('ticker').classList.add('show');

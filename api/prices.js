@@ -39,12 +39,15 @@ async function fetchFeed({ name, url }) {
   }
 }
 
+// E10/E5 = petrol, B7/B10 = diesel, SDV = super diesel
+const FUEL_TYPES = ['E10', 'E5', 'B7', 'B10', 'SDV'];
+
 export default async function handler(req, res) {
   const feeds = await Promise.all(FEEDS.map(fetchFeed));
 
-  const petrol = [];
-  const diesel = [];
+  const samples = Object.fromEntries(FUEL_TYPES.map((f) => [f, []]));
   const sources = [];
+  let stationCount = 0;
 
   for (const { name, stations } of feeds) {
     let used = 0;
@@ -56,23 +59,34 @@ export default async function handler(req, res) {
           lng >= LONDON.lngMin && lng <= LONDON.lngMax)
       ) continue;
 
-      const e10 = toPence(station.prices?.E10);
-      const b7 = toPence(station.prices?.B7);
-      if (e10) petrol.push(e10);
-      if (b7) diesel.push(b7);
-      if (e10 || b7) used++;
+      let any = false;
+      for (const fuel of FUEL_TYPES) {
+        const pence = toPence(station.prices?.[fuel]);
+        if (pence) {
+          samples[fuel].push(pence);
+          any = true;
+        }
+      }
+      if (any) used++;
     }
-    if (used > 0) sources.push(name);
+    if (used > 0) {
+      sources.push(name);
+      stationCount += used;
+    }
   }
 
   const avg = (arr) =>
     arr.length ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : null;
 
+  const fuels = Object.fromEntries(FUEL_TYPES.map((f) => [f, avg(samples[f])]));
+
   res.setHeader('Cache-Control', 's-maxage=10800, stale-while-revalidate=86400');
   res.status(200).json({
-    petrolPence: avg(petrol),
-    dieselPence: avg(diesel),
-    stationCount: Math.max(petrol.length, diesel.length),
+    fuels,
+    // kept for older cached pages
+    petrolPence: fuels.E10,
+    dieselPence: fuels.B7,
+    stationCount,
     sources,
     updated: new Date().toISOString(),
   });
